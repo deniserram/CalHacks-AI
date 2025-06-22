@@ -2,10 +2,11 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
+from dataclasses import asdict
 
-from agents.design_agent import analyze_design
-from agents.workflow_agent import check_user_workflow
-from agents.accessibility_agent import extract_branding_palette
+from backend.agents.design_agent import analyze_design
+from backend.agents.workflow_agent import check_user_workflow
+from backend.agents.accessibility_agent import analyze_website_accessibility_and_responsive, AccessibilityAnalysisOutput
 
 # --- Ensure 'screenshots' directory exists for Playwright if you use it directly in backend agents ---
 if not os.path.exists('screenshots'):
@@ -46,18 +47,18 @@ def mock_workflow_analysis(url):
         ]
     }
 
-def mock_branding_extraction(url):
-    print(f"Mocking branding palette extraction for {url}")
+#def mock_branding_extraction(url):
+ #   print(f"Mocking branding palette extraction for {url}")
     # In real agent, ColorThief would extract from a screenshot
-    return {
-        "status": "completed",
-        "palette": {
-            "primary_brand": "#336699",
-            "secondary_accent": "#FFCC00",
-            "text_color": "#333333",
-            "background_color": "#F0F0F0"
-        }
-    }
+  #  return {
+   #     "status": "completed",
+    #    "palette": {
+     #       "primary_brand": "#336699",
+      #      "secondary_accent": "#FFCC00",
+       #     "text_color": "#333333",
+        #    "background_color": "#F0F0F0"
+        #}
+    #}
 # -------------------------------------------------------------------
 
 
@@ -72,18 +73,24 @@ def analyze_website():
     if not url:
         return jsonify({"error": "URL is required"}), 400
 
+    print(f"Received request to analyze URL: {url}")
+
     results = {
         "url": url,
         "design_check_results": {},
         "user_workflow_results": {},
-        "branding_palette_results": {}
+        "branding_palette_results": {},
+        "accessibility_analysis": {}
     }
 
     try:
         # Call your actual agent functions here later
         results["design_check_results"] = analyze_design(url)
         results["user_workflow_results"] = check_user_workflow(url)
-        results["branding_palette_results"] = extract_branding_palette(url)
+
+        accessibility_output: AccessibilityAnalysisOutput = analyze_website_accessibility_and_responsive(url)
+        results["accessibility_analysis"] = asdict(accessibility_output)
+        results["branding_palette_results"] = accessibility_output.branding_palette
 
     except Exception as e:
         app.logger.error(f"Error during analysis for {url}: {e}")
@@ -91,6 +98,7 @@ def analyze_website():
         results["design_check_results"]["status"] = "failed"
         results["user_workflow_results"]["status"] = "failed"
         results["branding_palette_results"]["status"] = "failed"
+        results["accessibility_analysis"] = {"status": "failed", "error": str(e)}
 
     return jsonify(results)
 
