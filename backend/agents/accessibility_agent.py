@@ -7,7 +7,7 @@ import os
 import base64
 from PIL import Image
 
-def extract_branding_palette(url=None, screenshot_base64=None, key_elements=None):
+def analyze_website_accessibility_and_responsive(url=None, screenshot_base64=None, key_elements=None):
     """
     Extracts a branding palette from a website. If a screenshot is passed in base64,
     it uses that. Otherwise, it will take a screenshot using Playwright.
