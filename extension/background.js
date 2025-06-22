@@ -5,7 +5,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Must return true to indicate that sendResponse will be called asynchronously
     // This is crucial for async operations like fetch requests.
     (async () => {
-        const API_BASE_URL = 'http://localhost:5000/api'; // Your Flask backend URL
+        const API_BASE_URL = 'http://127.0.0.1:5000/api'; // Your Flask backend URL
 
         if (request.action === "analyzeWebsite") {
             try {

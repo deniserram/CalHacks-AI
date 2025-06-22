@@ -1,5 +1,6 @@
 import sys
 import os
+<<<<<<< HEAD
 import base64
 from PIL import Image
 import io
@@ -13,6 +14,16 @@ import google.generativeai as genai
 from agents.design_agent import analyze_design
 from agents.workflow_agent import check_user_workflow
 from agents.accessibility_agent import extract_branding_palette
+=======
+from dataclasses import asdict
+import sys
+print(f"DEBUG: sys.path at app.py before accessibility_agent import: {sys.path}")
+print(f"DEBUG: Attempting to import from backend.agents.accessibility_agent...")
+
+from backend.agents.design_agent import analyze_design
+from backend.agents.workflow_agent import check_user_workflow
+from backend.agents.accessibility_agent import analyze_website_accessibility_and_responsive, AccessibilityAnalysisOutput
+>>>>>>> c8c3870c8c89d30dcd7b59f405fa3d582d953024
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -66,12 +77,28 @@ def get_page_data_with_playwright(url):
         screenshot_base64 = base64.b64encode(screenshot_bytes).decode('utf-8')
         print(f"Playwright: Captured screenshot for {url}")
 
+<<<<<<< HEAD
         # 3. Get Key Elements (execute client-side JS within Playwright)
         key_elements_data = page.evaluate('''
             () => {
                 const data = { key_elements: [] };
                 // Keep this comprehensive list for the agents to analyze
                 const selectors = 'h1, h2, h3, h4, h5, h6, p, a, button, img, input, select, textarea, label, li, [role], [tabindex], div, span';
+=======
+#def mock_branding_extraction(url):
+ #   print(f"Mocking branding palette extraction for {url}")
+    # In real agent, ColorThief would extract from a screenshot
+  #  return {
+   #     "status": "completed",
+    #    "palette": {
+     #       "primary_brand": "#336699",
+      #      "secondary_accent": "#FFCC00",
+       #     "text_color": "#333333",
+        #    "background_color": "#F0F0F0"
+        #}
+    #}
+# -------------------------------------------------------------------
+>>>>>>> c8c3870c8c89d30dcd7b59f405fa3d582d953024
 
                 document.querySelectorAll(selectors).forEach(element => {
                     try {
@@ -146,6 +173,7 @@ def analyze_website():
     if not url:
         return jsonify({"error": "URL is required"}), 400
 
+<<<<<<< HEAD
     print(f"\n--- Received Analysis Request for {url} ---")
     print(f"Screenshot Base64 length: {len(screenshot_base64) if screenshot_base64 else 0} bytes")
     print(f"Number of Key Elements: {len(key_elements) if key_elements else 0}")
@@ -176,6 +204,34 @@ def analyze_website():
             except Exception as e:
                 print(f"Error running agent {key}: {e}")
                 results[key] = {"status": "error", "message": f"Agent failed: {e}", "data": {}}
+=======
+    print(f"Received request to analyze URL: {url}")
+
+    results = {
+        "url": url,
+        "design_check_results": {},
+        "user_workflow_results": {},
+        "branding_palette_results": {},
+        "accessibility_analysis": {}
+    }
+
+    try:
+        # Call your actual agent functions here later
+        results["design_check_results"] = analyze_design(url)
+        results["user_workflow_results"] = check_user_workflow(url)
+
+        accessibility_output: AccessibilityAnalysisOutput = analyze_website_accessibility_and_responsive(url)
+        results["accessibility_analysis"] = asdict(accessibility_output)
+        results["branding_palette_results"] = accessibility_output.branding_palette
+
+    except Exception as e:
+        app.logger.error(f"Error during analysis for {url}: {e}")
+        results["error"] = f"An error occurred during analysis: {str(e)}"
+        results["design_check_results"]["status"] = "failed"
+        results["user_workflow_results"]["status"] = "failed"
+        results["branding_palette_results"]["status"] = "failed"
+        results["accessibility_analysis"] = {"status": "failed", "error": str(e)}
+>>>>>>> c8c3870c8c89d30dcd7b59f405fa3d582d953024
 
     print(f"--- Analysis Complete for {url} ---")
     return jsonify(results)
