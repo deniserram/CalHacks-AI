@@ -1,17 +1,21 @@
 // extension/popup.js
+
 document.addEventListener('DOMContentLoaded', () => {
     const currentUrlSpan = document.getElementById('currentUrl');
     const analyzeButton = document.getElementById('analyzeButton');
     const loadingDiv = document.getElementById('loading');
     const resultsDiv = document.getElementById('results');
     const errorDiv = document.getElementById('error');
-    const designChecklist = document.getElementById('designChecklist');
+    
+    // Get references to your UI elements (ensure these IDs exist in popup.html)
+    const vibeAnalysisOutput = document.getElementById('vibeAnalysisOutput'); // NEW element
+    const designChecklist = document.getElementById('designChecklist'); 
     const workflowSuggestions = document.getElementById('workflowSuggestions');
     const brandingPaletteDiv = document.getElementById('brandingPalette');
     const savePaletteButton = document.getElementById('savePaletteButton');
     const paletteListDiv = document.getElementById('paletteList');
 
-    let currentAnalyzedPalette = null; // To hold the palette for saving
+    let currentAnalyzedPalette = null; // To hold the palette for saving (array of hex codes)
 
     // Get current tab URL
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -21,22 +25,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Function to display results (takes the full response object from background.js)
     const displayResults = (response) => {
-        designChecklist.innerHTML = '';
-        workflowSuggestions.innerHTML = '';
-        brandingPaletteDiv.innerHTML = '';
-        savePaletteButton.style.display = 'none';
-        errorDiv.style.display = 'none';
-        resultsDiv.innerHTML = ''; // Clear the overall results section
-
-        // --- Handle overall analysis failure ---
-        // 'response' is the object { success: boolean, data: backend_data, error: string }
+        // Clear previous results sections
+        resultsDiv.innerHTML = ''; // Clear overall results, then re-append sections
+        errorDiv.style.display = 'none'; // Hide any previous errors
+        
+        // --- Handle overall analysis failure from background.js or backend ---
         if (response.success === false) {
             errorDiv.textContent = `Analysis failed: ${response.error || 'Unknown error'}`;
             errorDiv.style.display = 'block';
             return;
         }
 
-        // Now, 'analysisData' contains the actual analysis results object from the backend
         const analysisData = response.data; // This is the object with design_check_results, etc.
 
         if (!analysisData) {
@@ -45,30 +44,91 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Display URL/Title if available
+        // Display URL/Title if available (append to main resultsDiv)
         resultsDiv.innerHTML += `<h3>Analysis for: ${analysisData.url || 'Current Page'}</h3>`;
 
+        // --- Design Analysis (Vibe, Feedback, and Color Palette) ---
+        resultsDiv.innerHTML += `<h4>Design Analysis</h4>`;
+        const designResults = analysisData.design_check_results?.data; // Get the 'data' object from design_check_results
 
-        // --- Design Check ---
-        resultsDiv.innerHTML += `<h4>Design Feedback</h4>`;
-        const designFeedback = analysisData.design_check_results?.data?.design_feedback;
-        if (designFeedback && designFeedback.length > 0) {
-            const ul = document.createElement('ul');
-            designFeedback.forEach(item => {
-                const li = document.createElement('li');
-                li.innerHTML = `<strong>${item.aspect || 'N/A'}:</strong> ${item.issue || 'N/A'}<br><em>Recommendation:</em> ${item.recommendation || 'N/A'}`;
-                ul.appendChild(li);
-            });
-            designChecklist.appendChild(ul);
+        if (designResults) {
+            // Display Vibe Analysis
+            if (vibeAnalysisOutput) { // Check if the element exists
+                const vibe = designResults.vibe_analysis;
+                if (vibe) {
+                    vibeAnalysisOutput.innerHTML = `
+                        <h5>Overall Vibe / Brand Personality:</h5>
+                        <p>Keywords: <strong>${vibe.keywords.join(', ') || 'N/A'}</strong></p>
+                        <p>${vibe.description || 'No description provided.'}</p>
+                    `;
+                } else {
+                    vibeAnalysisOutput.innerHTML = `<p>No vibe analysis provided.</p>`;
+                }
+                resultsDiv.appendChild(vibeAnalysisOutput); // Append the vibe section to main results
+            }
+
+            // Display Design Feedback
+            const designFeedback = designResults.design_feedback;
+            if (designFeedback && designFeedback.length > 0) {
+                designChecklist.innerHTML = `<h5>Design Feedback:</h5>`;
+                const ul = document.createElement('ul');
+                designFeedback.forEach(item => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<strong>${item.aspect || 'N/A'}:</strong> ${item.issue || 'N/A'}<br><em>Recommendation:</em> ${item.recommendation || 'N/A'}<br><em>Severity:</em> ${item.severity || 'N/A'}`;
+                    ul.appendChild(li);
+                });
+                designChecklist.appendChild(ul);
+            } else {
+                designChecklist.innerHTML = `<p>No specific design feedback.</p>`;
+            }
+            resultsDiv.appendChild(designChecklist); // Append the feedback section to main results
+            
+            // --- Extracted Color Palette from Design Agent ---
+            resultsDiv.innerHTML += `<h4>Extracted Color Palette:</h4>`; // NEW heading for design palette
+            const extractedPalette = designResults.extracted_color_palette; // Get palette from design results
+            
+            if (extractedPalette && extractedPalette.length > 0) {
+                const paletteContainer = document.createElement('div');
+                paletteContainer.innerHTML = '<strong>Dominant Colors:</strong> ';
+                
+                // Convert extracted palette (with proportions) to simple hex array for display/saving
+                const colorsForSwatches = [];
+                extractedPalette.forEach(item => {
+                    colorsForSwatches.push(item.color); // Collect just the hex code
+                    const swatch = document.createElement('span');
+                    swatch.classList.add('color-swatch');
+                    swatch.style.backgroundColor = item.color;
+                    swatch.title = `${item.color} (${(item.proportion * 100).toFixed(0)}%)`; // Show color and proportion on hover
+                    paletteContainer.appendChild(swatch);
+                });
+                
+                brandingPaletteDiv.innerHTML = ''; // Clear previous content if any
+                brandingPaletteDiv.appendChild(paletteContainer);
+                currentAnalyzedPalette = colorsForSwatches; // Store the simple array of hex codes for saving
+                savePaletteButton.style.display = 'block'; // Show save button
+            } else {
+                brandingPaletteDiv.innerHTML = `<p>No dominant colors or palette extracted by design agent.</p>`;
+                savePaletteButton.style.display = 'none';
+            }
+            resultsDiv.appendChild(brandingPaletteDiv); // Append the palette section to main results
+
         } else {
-            designChecklist.innerHTML = `<p>No specific design feedback.</p>`;
+            // This block runs if 'design_check_results' key is not present or its data is null/undefined
+            resultsDiv.innerHTML += `<h4>Design Analysis:</h4><p>Design analysis agent did not return data or encountered an error.</p>`;
         }
 
 
         // --- Workflow Check ---
         resultsDiv.innerHTML += `<h4>Workflow Analysis</h4>`;
+        // Make sure workflowSuggestions is cleared first
+        workflowSuggestions.innerHTML = ''; 
         const workflowAnalysis = analysisData.user_workflow_results?.data?.workflow_analysis;
-        if (workflowAnalysis && workflowAnalysis.length > 0) {
+        const workflowStatus = analysisData.user_workflow_results?.status;
+        const workflowMessage = analysisData.user_workflow_results?.message;
+
+        if (workflowStatus === "skipped") {
+            workflowSuggestions.innerHTML = `<p>Status: <strong>${workflowStatus}</strong></p><p>${workflowMessage}</p>`;
+        } else if (workflowAnalysis && workflowAnalysis.length > 0) {
             const ul = document.createElement('ul');
             workflowAnalysis.forEach(item => {
                 const li = document.createElement('li');
@@ -77,74 +137,55 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             workflowSuggestions.appendChild(ul);
         } else {
-            workflowSuggestions.innerHTML = `<p>No specific workflow issues identified.</p>`;
+            workflowSuggestions.innerHTML = `<p>No specific workflow issues identified or agent not fully active.</p>`;
         }
+        resultsDiv.appendChild(workflowSuggestions); // Append the workflow section to main results
 
-        // --- Branding Palette (which you use for Accessibility results) ---
-        resultsDiv.innerHTML += `<h4>Branding Palette (Accessibility Analysis)</h4>`; // Clarified heading for your setup
-        // Accessing branding data from 'accessibility_results' as per your backend setup
-        const brandingData = analysisData.accessibility_results?.data; 
-        currentAnalyzedPalette = brandingData?.palette || null; // Store for saving (make sure it's the array of hex codes)
 
-        if (brandingData && brandingData.palette && brandingData.palette.length > 0) {
-            // Dominant Color
-            if (brandingData.dominant_color) {
-                const dominantDiv = document.createElement('div');
-                dominantDiv.innerHTML = `<strong>Dominant Color:</strong> 
-                    <div class="color-swatch" style="background-color: ${brandingData.dominant_color};" title="${brandingData.dominant_color}"></div>
-                    ${brandingData.dominant_color}`;
-                brandingPaletteDiv.appendChild(dominantDiv);
-            }
+        // // --- Accessibility & Responsiveness Details ---
+        // resultsDiv.innerHTML += `<h4>Accessibility & Responsiveness Details</h4>`;
+        // const accessibilityResults = analysisData.accessibility_results?.data;
+        // const accessibilityStatus = analysisData.accessibility_results?.status;
+        // const accessibilityMessage = analysisData.accessibility_results?.message;
 
-            // Palette colors (iterate array of hex codes)
-            const paletteContainer = document.createElement('div');
-            paletteContainer.innerHTML = '<strong>Extracted Palette:</strong> ';
-            brandingData.palette.forEach(colorValue => {
-                const swatch = document.createElement('span');
-                swatch.classList.add('color-swatch');
-                swatch.style.backgroundColor = colorValue;
-                swatch.title = colorValue; // Show hex on hover
-                paletteContainer.appendChild(swatch);
-            });
-            brandingPaletteDiv.appendChild(paletteContainer);
+        // // Create a temporary div for accessibility output to avoid overwriting resultsDiv.innerHTML
+        // const accessibilityOutputDiv = document.createElement('div');
+        // if (accessibilityStatus === "success" && accessibilityResults) {
+        //     let accHtml = `<p>Status: <strong>${accessibilityStatus}</strong></p>`;
+        //     accHtml += `<p>${accessibilityMessage}</p>`;
+        //     if (accessibilityResults.accessibility_score !== undefined) {
+        //          accHtml += `<p><strong>Accessibility Score:</strong> ${accessibilityResults.accessibility_score || 'N/A'}</p>`;
+        //     }
+        //     if (accessibilityResults.responsiveness_notes) {
+        //         accHtml += `<p><strong>Responsiveness Notes:</strong> ${accessibilityResults.responsiveness_notes || 'N/A'}</p>`;
+        //     }
+            
+        //     // If you have specific 'accessibility_issues' coming from this agent:
+        //     if (accessibilityResults.accessibility_issues && accessibilityResults.accessibility_issues.length > 0) {
+        //         accHtml += `<h5>Specific Accessibility Issues:</h5><ul>`;
+        //         accessibilityResults.accessibility_issues.forEach(item => {
+        //             accHtml += `<li><strong>Issue:</strong> ${item.issue || 'N/A'}<br><em>Recommendation:</em> ${item.recommendation || 'N/A'}`;
+        //             if (item.element_info) accHtml += `<br><strong>Element:</strong> <pre>${JSON.stringify(item.element_info, null, 2)}</pre>`;
+        //             if (item.colors) accHtml += `<br><strong>Colors:</strong> Foreground: ${item.colors.foreground}, Background: ${item.colors.background}`;
+        //             accHtml += `</li>`;
+        //         });
+        //         accHtml += `</ul>`;
+        //     } else {
+        //         accHtml += `<p>No specific accessibility issues detailed.</p>`;
+        //     }
+        //     accessibilityOutputDiv.innerHTML = accHtml;
+        // } else {
+        //     accessibilityOutputDiv.innerHTML = `<p>Accessibility & Responsiveness analysis status: <strong>${accessibilityStatus || 'N/A'}</strong></p>`;
+        //     if (accessibilityMessage) accessibilityOutputDiv.innerHTML += `<p>${accessibilityMessage}</p>`;
+        //     accessibilityOutputDiv.innerHTML += `<p>No detailed accessibility data found.</p>`;
+        // }
+        // resultsDiv.appendChild(accessibilityOutputDiv); // Append the accessibility section to main results
 
-            savePaletteButton.style.display = 'block';
-        } else {
-            brandingPaletteDiv.innerHTML = `<p>No dominant colors or palette extracted.</p>`;
-            savePaletteButton.style.display = 'none'; // Hide if no palette to save
-        }
 
-        // --- Accessibility Analysis (if you were to add a dedicated one later) ---
-        // This section is currently structured to look for 'accessibility_issues'
-        // If your 'extract_branding_palette' function returns a different structure
-        // for accessibility analysis, you'll need to adjust this.
-        // For now, if branding is the *only* thing you want for 'accessibility_results',
-        // you might remove or rename this section, or adjust it to display
-        // accessibility-relevant data from your branding analysis if it includes it.
-        // Assuming there might be a separate structure for accessibility issues if they were added.
-        resultsDiv.innerHTML += `<h4>Additional Accessibility Details (if provided by agent)</h4>`; // New Heading
-        const accessibilityDetails = analysisData.accessibility_results?.data?.accessibility_issues; // Assuming 'accessibility_issues' nested
-        if (accessibilityDetails && accessibilityDetails.length > 0) {
-            const ul = document.createElement('ul');
-            accessibilityDetails.forEach(item => {
-                const li = document.createElement('li');
-                li.innerHTML = `<strong>Issue:</strong> ${item.issue || 'N/A'}<br><em>Recommendation:</em> ${item.recommendation || 'N/A'}`;
-                if (item.element_info) {
-                    li.innerHTML += `<br><strong>Element:</strong> <pre>${JSON.stringify(item.element_info, null, 2)}</pre>`;
-                }
-                if (item.colors) {
-                    li.innerHTML += `<br><strong>Colors:</strong> Foreground: ${item.colors.foreground}, Background: ${item.colors.background}`;
-                }
-                ul.appendChild(li);
-            });
-            resultsDiv.appendChild(ul);
-        } else {
-            resultsDiv.innerHTML += `<p>No specific accessibility details found (beyond branding).</p>`;
-        }
+        // Make the main results container visible
+        resultsDiv.style.display = 'block'; 
 
-        resultsDiv.style.display = 'block'; // Make the main results container visible
-
-        // Add CSS for color swatches if not already present
+        // Add CSS for color swatches if not already present (good practice to ensure styling)
         if (!document.getElementById('color-swatch-style')) {
             const style = document.createElement('style');
             style.id = 'color-swatch-style';
@@ -159,51 +200,36 @@ document.addEventListener('DOMContentLoaded', () => {
                     margin-right: 5px;
                     border-radius: 3px;
                 }
-                .palette-item { /* Changed from .palette-entry to .palette-item for clarity */
+                .palette-item {
                     margin-bottom: 5px;
                     display: flex;
                     align-items: center;
-                    flex-wrap: wrap; /* Allow wrapping for long lines of colors */
-                }
-                .result-item { /* Assuming you use this class in popup.html */
-                    background-color: #f9f9f9;
-                    border-left: 3px solid #007bff;
-                    padding: 10px;
-                    margin-bottom: 10px;
-                    border-radius: 4px;
-                }
-                .result-item h5 { /* Assuming you use h5 within result-item */
-                    margin-top: 0;
-                    color: #0056b3;
+                    flex-wrap: wrap;
                 }
             `;
             document.head.appendChild(style);
         }
     };
 
-    // Function to fetch and display saved palettes
+    // --- Event Listeners and Initial Load (remain mostly the same) ---
+    // Function to fetch and display saved palettes (assumes backend saves/returns hex codes)
     const fetchAndDisplaySavedPalettes = async () => {
         paletteListDiv.innerHTML = 'Loading saved palettes...';
         try {
             const response = await chrome.runtime.sendMessage({ action: "fetchPalettes" });
-            // The backend returns an ARRAY of objects: [{"name": "...", "palette": [...]}, ...]
             const savedPalettes = response.data; 
 
-            paletteListDiv.innerHTML = ''; // Clear previous
-            if (!savedPalettes || savedPalettes.length === 0) { // Check if it's an empty array
+            paletteListDiv.innerHTML = '';
+            if (!savedPalettes || savedPalettes.length === 0) {
                 paletteListDiv.textContent = 'No palettes saved yet.';
             } else {
-                // Iterate over the array of saved palette objects
                 savedPalettes.forEach(paletteEntry => {
                     const paletteDiv = document.createElement('div');
-                    paletteDiv.classList.add('palette-item'); // Use the new class
-                    let html = `<strong>${paletteEntry.name}</strong>: `; // Access 'name' property
-
-                    // Iterate over the 'palette' array (which contains hex color strings)
-                    paletteEntry.palette.forEach(colorValue => {
+                    paletteDiv.classList.add('palette-item');
+                    let html = `<strong>${paletteEntry.name}</strong>: `;
+                    paletteEntry.palette.forEach(colorValue => { // This assumes paletteEntry.palette is an array of hex strings
                         html += `<span class="color-swatch" style="background-color: ${colorValue};" title="${colorValue}"></span>`;
                     });
-                    
                     paletteDiv.innerHTML = html;
                     paletteListDiv.appendChild(paletteDiv);
                 });
@@ -216,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event listener for Analyze button
     analyzeButton.addEventListener('click', async () => {
-        const urlToAnalyze = currentUrlSpan.textContent; // Correctly defined here
+        const urlToAnalyze = currentUrlSpan.textContent;
         if (urlToAnalyze === 'N/A' || !urlToAnalyze) {
             errorDiv.textContent = 'Cannot get current tab URL.';
             errorDiv.style.display = 'block';
@@ -224,18 +250,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         loadingDiv.style.display = 'block';
-        resultsDiv.style.display = 'none';
+        resultsDiv.style.display = 'none'; // Hide results until new ones are ready
         errorDiv.style.display = 'none';
 
         try {
-            // Send message to background.js to start analysis
             const response = await chrome.runtime.sendMessage({
                 action: "analyzeWebsite",
                 url: urlToAnalyze
             });
             
-            // Pass the entire response object to displayResults
-            displayResults(response); // <--- CHANGED THIS LINE
+            displayResults(response);
             
         } catch (error) {
             console.error('Error during analysis:', error);
@@ -248,18 +272,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event listener for Save Palette button
     savePaletteButton.addEventListener('click', async () => {
-        if (currentAnalyzedPalette && currentAnalyzedPalette.length > 0) { // Check length for array
+        if (currentAnalyzedPalette && currentAnalyzedPalette.length > 0) {
             const paletteName = prompt("Enter a name for this palette:", "My Custom Palette");
             if (paletteName) {
                 try {
                     const response = await chrome.runtime.sendMessage({
                         action: "savePalette",
                         name: paletteName,
-                        palette: currentAnalyyzedPalette // This needs to be a list of colors (hex codes)
+                        palette: currentAnalyzedPalette // This should now be a list of hex codes
                     });
                     if (response.success) {
                         alert(response.message || "Palette saved!");
-                        fetchAndDisplaySavedPalettes(); // Refresh saved palettes
+                        fetchAndDisplaySavedPalettes();
                     } else {
                         alert(`Failed to save palette: ${response.error}`);
                     }

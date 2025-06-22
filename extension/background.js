@@ -24,8 +24,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 // chrome.tabs.captureVisibleTab returns a data URL (e.g., "data:image/png;base64,...")
                 const screenshotDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
                 // Remove the "data:image/png;base64," prefix for the backend
+                console.log("DEBUG: raw screenshotDataUrl (first 100 chars):", screenshotDataUrl ? screenshotDataUrl.substring(0, 100) : "null or undefined");
+                console.log("DEBUG: raw screenshotDataUrl length:", screenshotDataUrl ? screenshotDataUrl.length : 0);
+                // --- END DEBUG CONSOLE LOGS ---
+
                 const cleanScreenshotBase64 = screenshotDataUrl.replace(/^data:image\/(png|jpeg|gif);base64,/, '');
 
+                // --- ADD THESE DEBUG CONSOLE LOGS RIGHT HERE ---
+                console.log("DEBUG: cleanScreenshotBase64 (first 100 chars):", cleanScreenshotBase64 ? cleanScreenshotBase64.substring(0, 100) : "null or undefined");
+                console.log("DEBUG: cleanScreenshotBase64 length:", cleanScreenshotBase64 ? cleanScreenshotBase64.length : 0);
+                // --- END DEBUG CONSOLE LOGS ---
                 // 3. Inject content.js if it's not already running (this ensures the listener is set up)
                 // You can add logic to only inject if not already injected, but for a one-off action, it's fine.
                 await chrome.scripting.executeScript({

@@ -1,38 +1,23 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Website Analyzer</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Pixel Pal: Your Design Companion</title>
+    <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-    <div class="container">
-        <h1>Website Analyzer</h1>
-        <p>Analyzing: <strong id="currentUrl">Loading...</strong></p>
-        <button id="analyzeButton">Start Analysis</button>
-
-        <div id="loading" style="display: none;">
-            <p>Analyzing website... Please wait.</p>
-            <div class="spinner"></div>
-        </div>
-
-        <div id="results" style="display: none;">
-            <h2>Analysis Results</h2>
-            <h3>Design Check</h3>
-            <ul id="designChecklist"></ul>
-            <h3>User Workflow</h3>
-            <ul id="workflowSuggestions"></ul>
-            <h3>Branding Palette</h3>
-            <div id="brandingPalette"></div>
-            <button id="savePaletteButton" style="display:none;">Save This Palette</button>
-        </div>
-
-        <div id="savedPalettes" style="margin-top: 20px;">
-            <h2>Saved Palettes</h2>
-            <div id="paletteList">No palettes saved yet.</div>
-        </div>
-
-        <div id="error" style="color: red; display: none;"></div>
+    <h1>Pixel Pal: Your Design Companion</h1>
+    <span id="currentUrl"></span> <button id="analyzeButton">Analyze Current Page</button>
+    <div id="loading" style="display: none;">Analyzing...</div>
+    <div id="error" style="color: red; display: none;"></div>
+    
+    <div id="results">
+        <div id="vibeAnalysisOutput"></div> <div id="designChecklist"></div>
+        <div id="workflowSuggestions"></div>
+        <div id="brandingPalette"></div>
+        <button id="savePaletteButton" style="display: none;">Save Palette</button>
+        <div id="paletteList"></div>
     </div>
+    
     <script src="popup.js"></script>
 </body>
 </html>

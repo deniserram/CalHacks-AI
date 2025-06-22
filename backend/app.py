@@ -14,6 +14,8 @@ import google.generativeai as genai
 from agents.design_agent import analyze_design
 from agents.workflow_agent import check_user_workflow
 from agents.accessibility_agent import analyze_website_accessibility_and_responsive
+
+
 from dataclasses import asdict
 
 print(f"DEBUG: sys.path at app.py before accessibility_agent import: {sys.path}")
@@ -39,6 +41,8 @@ if current_dir not in sys.path:
 
 app = Flask(__name__)
 CORS(app)
+
+
 
 # Helper function to get page data using Playwright
 def get_page_data_with_playwright(url):
@@ -162,7 +166,7 @@ def analyze_website():
     agent_tasks = {
         "design_check_results": analyze_design,
         "user_workflow_results": check_user_workflow,
-        "accessibility_results": analyze_website_accessibility_and_responsive(url),
+        "accessibility_results": analyze_website_accessibility_and_responsive,
     }
 
     # Use a ThreadPoolExecutor to run agent analyses concurrently
@@ -176,12 +180,22 @@ def analyze_website():
         }
 
         # Collect results as they complete
-        for key, future in futures.items():
-            try:
-                results[key] = future.result() # This will block until the result is ready for this future
-            except Exception as e:
-                print(f"Error running agent {key}: {e}")
-                results[key] = {"status": "error", "message": f"Agent failed: {e}", "data": {}}
+    for key, future in futures.items():
+        try:
+            agent_result = future.result() # This will block until the result is ready for this future
+
+            if key == "accessibility_results":
+               # The accessibility agent returns a dataclass, so use asdict()
+               results[key] = asdict(agent_result)
+               print(f"DEBUG: Agent '{key}' (dataclass) completed successfully.")
+            else:
+               # Assume other agents (design, workflow) return plain dictionaries or other types
+               # Assign them directly without asdict()
+               results[key] = agent_result
+               print(f"DEBUG: Agent '{key}' (non-dataclass) completed successfully.")
+        except Exception as e:
+            print(f"Error running agent {key}: {e}")
+            results[key] = {"status": "error", "message": f"Agent failed: {e}", "data": {}}
 
     print(f"--- Analysis Complete for {url} ---")
     return jsonify(results)
