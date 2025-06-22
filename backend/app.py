@@ -13,8 +13,7 @@ import google.generativeai as genai
 # Ensure these imports are correct
 from agents.design_agent import analyze_design
 from agents.workflow_agent import check_user_workflow
-from agents.accessibility_agent import analyze_website_accessibility_and_responsive, AccessibilityAnalysisOutput
-
+from agents.accessibility_agent import analyze_website_accessibility_and_responsive
 from dataclasses import asdict
 
 print(f"DEBUG: sys.path at app.py before accessibility_agent import: {sys.path}")
