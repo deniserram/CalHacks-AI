@@ -3,6 +3,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 from dataclasses import asdict
+import sys
+print(f"DEBUG: sys.path at app.py before accessibility_agent import: {sys.path}")
+print(f"DEBUG: Attempting to import from backend.agents.accessibility_agent...")
 
 from backend.agents.design_agent import analyze_design
 from backend.agents.workflow_agent import check_user_workflow
