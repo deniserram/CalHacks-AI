@@ -1,91 +1,70 @@
-# backend/agents/design_agent.py
-from playwright.sync_api import sync_playwright
-import os # For saving screenshots
-# from bs4 import BeautifulSoup # Uncomment if you need advanced HTML parsing
-# from webcolors import rgb_to_hex # pip install webcolors - if you do advanced color checks
+import google.generativeai as genai
+# Change this import line:
+from utils import get_image_parts, parse_gemini_json_response # Import helpers
 
-def analyze_design(url: str) -> dict:
+# ... rest of the design_agent.py code
+def analyze_design(url, screenshot_base64, key_elements):
     """
-    Analyzes a website for basic design checks, WCAG standards, padding, and responsive design.
-    Generates a checklist of potential fixes.
+    Analyzes the design of a webpage using Gemini Pro Vision and DOM data.
     """
-    checklist = []
-    issues_found = False
+    print(f"Running Design Agent for: {url}")
+    
+    image_parts = get_image_parts(screenshot_base64)
+
+    design_elements_context = []
+    # Filter and format key_elements relevant for design analysis
+    for e in key_elements:
+        if e['tag_name'] in ['H1', 'H2', 'P', 'BUTTON', 'A', 'IMG', 'DIV', 'SPAN'] and e['bounding_box']['width'] > 0 and e['bounding_box']['height'] > 0:
+            styles = e['computed_styles']
+            design_elements_context.append(
+                f"- Tag: {e['tag_name']}, Text: '{e['text_content'] or ''}', "
+                f"BBox: ({e['bounding_box']['x']},{e['bounding_box']['y']},{e['bounding_box']['width']}x{e['bounding_box']['height']}), "
+                f"Styles: {{font: {styles.get('fontSize')}/{styles.get('lineHeight')} {styles.get('fontFamily')}, color: {styles.get('color')}, bg: {styles.get('backgroundColor')}}}"
+            )
+    
+    prompt_parts = [
+        "You are an expert UI/UX designer. Analyze the provided webpage screenshot and key elements for its design quality, focusing on visual hierarchy, consistency, spacing, typography, and color harmony. Identify specific areas for improvement and provide actionable recommendations. Be concise and actionable.",
+        f"Webpage URL: {url}\n",
+        "Here is the visual context:",
+        *image_parts,
+        "Here are details of key elements from the page's DOM structure:\n",
+        "\n".join(design_elements_context) if design_elements_context else "No specific elements provided or elements filtered.",
+        "\nProvide your analysis in a structured JSON format. Example structure:",
+        """
+        ```json
+        {
+          "design_feedback": [
+            {
+              "aspect": "Visual Hierarchy",
+              "issue": "Headings are not clearly differentiated from body text.",
+              "recommendation": "Increase font size or weight of H1/H2 elements."
+            },
+            {
+              "aspect": "Spacing Consistency",
+              "issue": "Inconsistent vertical spacing between sections.",
+              "recommendation": "Establish a consistent vertical rhythm using a base unit for spacing (e.g., 20px, 40px)."
+            },
+            {
+              "aspect": "Typography",
+              "issue": "Too many font styles are used, leading to visual clutter.",
+              "recommendation": "Limit to 2-3 complementary font families and consistent sizes."
+            },
+            {
+              "aspect": "Color Harmony",
+              "issue": "Colors feel disjointed and don't form a cohesive palette.",
+              "recommendation": "Utilize a primary, secondary, and accent color scheme consistently."
+            }
+          ]
+        }
+        ```
+        """
+    ]
 
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch() # You can choose 'firefox' or 'webkit' too
-            page = browser.new_page()
-            page.goto(url, wait_until="load") # 'load', 'domcontentloaded', 'networkidle'
-
-            # --- 1. Basic WCAG & HTML Structure Checks ---
-
-            # Check for missing alt text on images
-            for img in page.locator('img').all():
-                if not img.get_attribute('alt'):
-                    checklist.append(f"Accessibility: Image missing alt text (src: {img.get_attribute('src')})")
-                    issues_found = True
-
-            # Check for basic heading structure (e.g., presence of h1)
-            if page.locator('h1').count() == 0:
-                checklist.append("Accessibility: No <h1> tag found on the page. Consider a main heading for structure.")
-                issues_found = True
-
-            # Check for viewport meta tag (crucial for responsive design)
-            if not page.locator('meta[name="viewport"]').count():
-                checklist.append("Responsive Design: Missing <meta name='viewport'> tag. This is essential for proper scaling on mobile devices.")
-                issues_found = True
-
-            # --- 2. Responsive Design (via screenshots at different viewports) ---
-            # These are for manual review or further automated analysis (e.g., image diffing)
-
-            # Define screenshot path
-            sanitized_url_name = url.replace('https://', '').replace('http://', '').replace('/', '_').replace('.', '_').replace(':', '')
-            screenshot_dir = 'screenshots' # Assumed to be created by app.py already
-
-            # Mobile Viewport Screenshot
-            page.set_viewport_size({"width": 375, "height": 812}) # iPhone X dimensions
-            mobile_screenshot_path = os.path.join(screenshot_dir, f"{sanitized_url_name}_mobile.png")
-            page.screenshot(path=mobile_screenshot_path)
-            checklist.append(f"Responsive Check: Mobile screenshot captured for visual review: {mobile_screenshot_path}")
-
-            # Desktop Viewport Screenshot
-            page.set_viewport_size({"width": 1280, "height": 800}) # Common desktop width
-            desktop_screenshot_path = os.path.join(screenshot_dir, f"{sanitized_url_name}_desktop.png")
-            page.screenshot(path=desktop_screenshot_path)
-            checklist.append(f"Responsive Check: Desktop screenshot captured for visual review: {desktop_screenshot_path}")
-
-            # --- 3. Placeholder for more advanced checks (e.g., contrast, padding consistency) ---
-            # These are harder to implement accurately in a hackathon:
-            # - Contrast: Requires extracting computed styles for text/background colors and applying WCAG formulas.
-            # - Padding/Spacing: Difficult to automate consistency without complex image analysis or robust CSS parsing.
-
-            # Example placeholder for a deeper check if you have time:
-            # try:
-            #     # This is a highly simplified way to get some CSS properties, not robust for all cases
-            #     font_size_elements = page.evaluate('''() => {
-            #         const elements = Array.from(document.querySelectorAll('p, li, span, a'));
-            #         return elements.map(el => window.getComputedStyle(el).fontSize);
-            #     }''')
-            #     # You'd then analyze font_size_elements for very small sizes, etc.
-            #     if any(int(s.replace('px', '').replace('rem', '').split('.')[0]) < 12 for s in font_size_elements if s.endswith('px')):
-            #         checklist.append("Visual Design: Potentially small font sizes detected. Review for readability.")
-            #         issues_found = True
-            # except Exception as e:
-            #     print(f"Could not perform advanced font size check: {e}")
-
-            browser.close()
-
+        model = genai.GenerativeModel('gemini-1.5-flash')        # Ensure the generation_config is set for JSON output if supported by your model version
+        response = model.generate_content(prompt_parts, generation_config={"response_mime_type": "application/json"})
+        parsed_data = parse_gemini_json_response(response.text)
+        return {"status": "success", "data": parsed_data}
     except Exception as e:
-        checklist.append(f"Error during design analysis: {e}")
-        issues_found = True
-
-    status = "completed with issues" if issues_found else "completed successfully"
-    return {"status": status, "checklist": checklist}
-
-# Example of how you would call this (for local testing of the agent script):
-# if __name__ == '__main__':
-#     test_url = "https://www.google.com" # Or any URL you want to test
-#     results = analyze_design(test_url)
-#     import json
-#     print(json.dumps(results, indent=2))
+        print(f"Error in Design Agent: {e}")
+        return {"status": "error", "message": f"Design analysis failed: {e}", "data": {}}

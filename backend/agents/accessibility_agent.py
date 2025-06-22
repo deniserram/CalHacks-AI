@@ -1,66 +1,50 @@
 # backend/agents/branding_agent.py
-from playwright.sync_api import sync_playwright
-from colorthief import ColorThief # pip install colorthief
-import io # To handle image data in memory
-import os # For saving temporary screenshots (ColorThief can work from bytes, but file is often simpler)
-# from webcolors import rgb_to_hex # pip install webcolors - useful for converting RGB tuples to hex strings
 
-def extract_branding_palette(url: str) -> dict:
+import base64
+from PIL import Image
+import io
+from colorthief import ColorThief
+from utils import get_image_parts, parse_gemini_json_response
+import google.generativeai as genai
+
+# --- FIX THIS LINE ---
+def extract_branding_palette(url, screenshot_base64, key_elements):
+# --- END FIX ---
     """
-    Extracts a branding palette from a website by taking a screenshot and
-    using ColorThief to find dominant colors.
+    Extracts dominant colors and a color palette from the webpage screenshot.
+    Optionally uses Gemini for branding tone analysis.
     """
-    palette_data = {}
-    issues_found = False
-    temp_screenshot_path = None # Initialize to None
+    print(f"Running Branding Agent for: {url}")
+    
+    dominant_color = None
+    palette = []
+    branding_tone = "N/A"
 
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            page = browser.new_page()
-            page.goto(url, wait_until="load") # Wait for page to load
+    if screenshot_base64:
+        try:
+            image_bytes = base64.b64decode(screenshot_base64)
+            img_stream = io.BytesIO(image_bytes)
+            
+            img_stream.seek(0) 
+            color_thief = ColorThief(img_stream)
+            
+            dominant_rgb = color_thief.get_color(quality=1)
+            palette_rgb = color_thief.get_palette(color_count=5, quality=10) 
 
-            # Define screenshot path
-            sanitized_url_name = url.replace('https://', '').replace('http://', '').replace('/', '_').replace('.', '_').replace(':', '')
-            screenshot_dir = 'screenshots' # Assumed to be created by app.py already
-            temp_screenshot_path = os.path.join(screenshot_dir, f"{sanitized_url_name}_temp_branding.png")
+            dominant_color = f"#{dominant_rgb[0]:02x}{dominant_rgb[1]:02x}{dominant_rgb[2]:02x}"
+            palette = [f"#{r:02x}{g:02x}{b:02x}" for r, g, b in palette_rgb]
 
-            # Take a screenshot
-            page.screenshot(path=temp_screenshot_path, full_page=True)
-            browser.close()
+        except Exception as e:
+            print(f"Error extracting colors with ColorThief: {e}")
+            return {"status": "error", "message": f"Color extraction failed: {e}", "data": {"dominant_color": None, "palette": [], "branding_tone": branding_tone}}
+    else:
+        return {"status": "error", "message": "No screenshot provided for branding palette extraction.", "data": {"dominant_color": None, "palette": [], "branding_tone": branding_tone}}
 
-            # Use ColorThief to extract dominant colors from the screenshot
-            color_thief = ColorThief(temp_screenshot_path)
-
-            # Get a color palette (e.g., 6 dominant colors)
-            # You can adjust the number of colors in get_palette()
-            dominant_colors_rgb = color_thief.get_palette(color_count=6)
-
-            # Convert RGB tuples to hex codes for easier use in frontend
-            # Assign simple names for the hackathon
-            color_names = ["primary", "secondary", "accent1", "accent2", "dark_text", "light_bg"]
-            for i, rgb in enumerate(dominant_colors_rgb):
-                hex_color = '#%02x%02x%02x' % rgb # Convert RGB tuple to hex string
-                if i < len(color_names):
-                    palette_data[color_names[i]] = hex_color
-                else:
-                    palette_data[f"color_{i+1}"] = hex_color # Fallback for extra colors
-
-    except Exception as e:
-        print(f"Error extracting branding palette: {e}")
-        issues_found = True
-
-    finally:
-        # Clean up the temporary screenshot file
-        if temp_screenshot_path and os.path.exists(temp_screenshot_path):
-            os.remove(temp_screenshot_path)
-
-    status = "completed with issues" if issues_found or not palette_data else "completed"
-    return {"status": status, "palette": palette_data}
-
-# Example of how you would call this:
-# if __name__ == '__main__':
-#     test_url = "https://www.nasa.gov/" # Or any URL
-#     results = extract_branding_palette(test_url)
-#     import json
-#     print(json.dumps(results, indent=2))
+    return {
+        "status": "success",
+        "data": {
+            "dominant_color": dominant_color,
+            "palette": palette,
+            "branding_tone": branding_tone
+        }
+    }
